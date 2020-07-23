@@ -86,7 +86,7 @@
 #endif
 #endif /* !CONFIG_GICV3 */
 
-#if defined(CONFIG_TARGET_VEXPRESS64_BASE_FVP) && !defined(CONFIG_DM_ETH)
+#if (defined(CONFIG_TARGET_VEXPRESS64_BASE_FVP) || defined(CONFIG_TARGET_VEXPRESS64_BASE_FVP_AARCH32)) && !defined(CONFIG_DM_ETH)
 /* The Vexpress64 BASE_FVP simulator uses SMSC91C111 */
 #define CONFIG_SMC91111			1
 #define CONFIG_SMC91111_BASE		(V2M_PA_BASE + 0x01A000000)
@@ -114,7 +114,7 @@
 #ifdef CONFIG_TARGET_VEXPRESS64_JUNO
 #define PHYS_SDRAM_2			(0x880000000)
 #define PHYS_SDRAM_2_SIZE		0x180000000
-#elif CONFIG_NR_DRAM_BANKS == 2
+#elif CONFIG_TARGET_VEXPRESS64_BASE_FVP && CONFIG_NR_DRAM_BANKS == 2
 #define PHYS_SDRAM_2			(0x880000000)
 #define PHYS_SDRAM_2_SIZE		0x80000000
 #endif
@@ -171,23 +171,41 @@
 				"fdt_addr_r=0x80000000\0" \
 				BOOTENV
 
-#elif CONFIG_TARGET_VEXPRESS64_BASE_FVP
+#elif defined(CONFIG_TARGET_VEXPRESS64_BASE_FVP) || \
+        defined(CONFIG_TARGET_VEXPRESS64_BASE_FVP_AARCH32)
 
-#define VEXPRESS_KERNEL_ADDR	0x80080000
-#define VEXPRESS_FDT_ADDR	0x8fc00000
-#define VEXPRESS_BOOT_ADDR	0x8fd00000
-#define VEXPRESS_RAMDISK_ADDR	0x8fe00000
+#define VEXPRESS_KERNEL_ADDR   0x80080000
+#define VEXPRESS_FDT_ADDR      0x8fc00000
+#define VEXPRESS_BOOT_ADDR     0x8fd00000
+#define VEXPRESS_RAMDISK_ADDR  0x8fe00000
 
-#define CONFIG_EXTRA_ENV_SETTINGS	\
+#define CONFIG_EXTRA_ENV_SETTINGS      \
 				"kernel_name=Image\0"		\
-				"kernel_addr_r=" __stringify(VEXPRESS_KERNEL_ADDR) "\0"	\
-				"ramdisk_name=ramdisk.img\0"	\
-				"ramdisk_addr_r=" __stringify(VEXPRESS_RAMDISK_ADDR) "\0" \
-				"fdtfile=devtree.dtb\0"	\
-				"fdt_addr_r=" __stringify(VEXPRESS_FDT_ADDR) "\0"	\
-				"boot_name=boot.img\0" \
-				"boot_addr_r=" __stringify(VEXPRESS_BOOT_ADDR) "\0"
+                                "kernel_addr_r=" __stringify(VEXPRESS_KERNEL_ADDR) "\0" \
+                                "ramdisk_name=ramdisk.img\0"    \
+                                "ramdisk_addr_r=" __stringify(VEXPRESS_RAMDISK_ADDR) "\0" \
+                                "fdtfile=devtree.dtb\0" \
+                                "fdt_addr_r=" __stringify(VEXPRESS_FDT_ADDR) "\0"       \
+                                "boot_name=boot.img\0" \
+                                "boot_addr_r=" __stringify(VEXPRESS_BOOT_ADDR) "\0"
 
+#ifndef CONFIG_BOOTCOMMAND
+#define CONFIG_BOOTCOMMAND	"if smhload ${boot_name} ${boot_addr_r}; then " \
+				"  set bootargs; " \
+				"  abootimg addr ${boot_addr_r}; " \
+				"  abootimg get dtb --index=0 fdt_addr_r; " \
+				"  bootm ${boot_addr_r} ${boot_addr_r} " \
+				"  ${fdt_addr_r}; " \
+				"else; " \
+				"  smhload ${kernel_name} ${kernel_addr_r}; " \
+				"  smhload ${fdtfile} ${fdt_addr_r}; " \
+				"  smhload ${ramdisk_name} ${initrd_addr_r} "\
+				"  initrd_end; " \
+				"  fdt addr ${fdt_addr_r}; fdt resize; " \
+				"  fdt chosen ${ramdisk_addr_r} ${initrd_end}; " \
+				"  bootz $kernel_addr_r - $fdt_addr_r; " \
+				"fi"
+#endif
 #endif
 
 /* Monitor Command Prompt */
