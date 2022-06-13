@@ -92,15 +92,7 @@ int dram_init_banksize(void)
 	return 0;
 }
 
-/* Assigned in lowlevel_init.S
- * Push the variable into the .data section so that it
- * does not get cleared later.
- */
-unsigned long __section(".data") prior_stage_fdt_address;
-
 #ifdef CONFIG_OF_BOARD
-
-#ifdef CONFIG_TARGET_VEXPRESS64_JUNO
 #define JUNO_FLASH_SEC_SIZE	(256 * 1024)
 static phys_addr_t find_dtb_in_nor_flash(const char *partname)
 {
@@ -145,11 +137,9 @@ static phys_addr_t find_dtb_in_nor_flash(const char *partname)
 
 	return ~0;
 }
-#endif
 
 void *board_fdt_blob_setup(int *err)
 {
-#ifdef CONFIG_TARGET_VEXPRESS64_JUNO
 	phys_addr_t fdt_rom_addr = find_dtb_in_nor_flash(CONFIG_JUNO_DTB_PART);
 
 	*err = 0;
@@ -159,22 +149,6 @@ void *board_fdt_blob_setup(int *err)
 	}
 
 	return (void *)fdt_rom_addr;
-#endif
-
-#ifdef VEXPRESS_FDT_ADDR
-	if (fdt_magic(VEXPRESS_FDT_ADDR) == FDT_MAGIC) {
-		*err = 0;
-		return (void *)VEXPRESS_FDT_ADDR;
-	}
-#endif
-
-	if (fdt_magic(prior_stage_fdt_address) == FDT_MAGIC) {
-		*err = 0;
-		return (void *)prior_stage_fdt_address;
-	}
-
-	*err = -ENXIO;
-	return NULL;
 }
 #endif
 
