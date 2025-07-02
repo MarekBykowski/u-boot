@@ -9,6 +9,8 @@
  * Marius Groeger <mgroeger@sysgo.de>
  */
 
+#define DEBUG
+
 #include <common.h>
 #include <api.h>
 #include <bootstage.h>
