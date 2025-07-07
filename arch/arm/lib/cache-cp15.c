@@ -24,6 +24,7 @@ __weak void arm_init_before_mmu(void)
 {
 }
 
+static int count = 0;
 static void set_section_phys(int section, phys_addr_t phys,
 			     enum dcache_option option)
 {
@@ -44,6 +45,13 @@ static void set_section_phys(int section, phys_addr_t phys,
 
 	/* Set PTE */
 	page_table[section] = value;
+
+	/* Print only N pages tables */
+	if (count++ <= 3) {
+		printf("mb: %s(): addr %p: section %d, pa 0x%x, dc (0x%x), 0x%x\n",
+			__func__, page_table + section, section, phys,
+			option, value);
+	}
 }
 
 void set_section_dcache(int section, enum dcache_option option)
@@ -118,13 +126,25 @@ static inline void mmu_setup(void)
 	int i;
 	u32 reg;
 
+	printf("mb: %s(): page_tables @ %p\n", __func__, (u32 *)gd->arch.tlb_addr);
 	arm_init_before_mmu();
+
+	printf("mb: %s():\n"
+	      "\tDCACHE_OFF 0x%x\n"
+	      "\tDCACHE_WRITEBACK 0x%x\n"
+	      "\tDCACHE_WRITEALLOC 0x%x\n",
+	      __func__, DCACHE_OFF, DCACHE_WRITEBACK, DCACHE_WRITEALLOC);
+	printf("mb: %s(): Set up an identity-mapping for all 4GB, DCACHE_OFF, rw for everyone\n", __func__);
+
 	/* Set up an identity-mapping for all 4GB, rw for everyone */
 	for (i = 0; i < ((4096ULL * 1024 * 1024) >> MMU_SECTION_SHIFT); i++)
 		set_section_dcache(i, DCACHE_OFF);
+	count = 0;
 
+	printf("mb: %s(): mmu mapping for CONFIG_NR_DRAM_BANKS\n", __func__);
 	for (i = 0; i < CONFIG_NR_DRAM_BANKS; i++) {
 		dram_bank_mmu_setup(i);
+		count = 0;
 	}
 
 #if defined(CONFIG_ARMV7_LPAE) && __LINUX_ARM_ARCH__ != 4
@@ -182,10 +202,13 @@ static inline void mmu_setup(void)
 	/* Set TTBR0 */
 	reg = gd->arch.tlb_addr & TTBR0_BASE_ADDR_MASK;
 #if defined(CONFIG_SYS_ARM_CACHE_WRITETHROUGH)
+	printf("mb: %s(): CONFIG_SYS_ARM_CACHE_WRITETHROUGH\n", __func__);
 	reg |= TTBR0_RGN_WT | TTBR0_IRGN_WT;
 #elif defined(CONFIG_SYS_ARM_CACHE_WRITEALLOC)
+	printf("mb: %s(): CONFIG_SYS_ARM_CACHE_WRITEALLOC\n", __func__);
 	reg |= TTBR0_RGN_WBWA | TTBR0_IRGN_WBWA;
 #else
+	printf("mb: %s(): CONFIG_SYS_ARM_CACHE_WRITEBACK\n", __func__);
 	reg |= TTBR0_RGN_WB | TTBR0_IRGN_WB;
 #endif
 	asm volatile("mcr p15, 0, %0, c2, c0, 0"
@@ -209,6 +232,7 @@ static inline void mmu_setup(void)
 
 static int mmu_enabled(void)
 {
+	printf("mb: %s()\n", __func__);
 	return get_cr() & CR_M;
 }
 #endif /* CONFIG_SYS_ARM_MMU */
