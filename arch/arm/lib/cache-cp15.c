@@ -48,9 +48,12 @@ static void set_section_phys(int section, phys_addr_t phys,
 
 	/* Print only N pages tables */
 	if (count++ <= 3) {
-		printf("mb: %s(): addr %p: section %d, pa 0x%x, dc (0x%x), 0x%x\n",
+		printf("mb: %s(): addr %p: section %d, pa 0x%lx, dcache_option (0x%016llx), descriptor 0x%016llx\n",
 			__func__, page_table + section, section, phys,
 			option, value);
+		printf("mb: %s(): We have HMAIR[0] or [1], each having 4x blocks [7:0]. Block descriptor points to HMAIR[%llx] and block %llx within it. Read it out\n",
+			__func__, (((value >> 2) & 0x7) & 0x4) >> 2, (value >> 2) & 0x7);
+		
 	}
 }
 
@@ -126,14 +129,32 @@ static inline void mmu_setup(void)
 	int i;
 	u32 reg;
 
-	printf("mb: %s(): page_tables @ %p\n", __func__, (u32 *)gd->arch.tlb_addr);
+	printf("mb: %s(): page_tables @ %p\n", __func__, (u64 *)gd->arch.tlb_addr);
 	arm_init_before_mmu();
 
+	{
+		#define D_MAR1 0x34
+		/*#define D_MAR2 (1ULL << 54)*/
+		enum marek_type {
+			mar1 = D_MAR1,
+			mar2 = D_MAR1,
+		};
+		
+		enum marek_type m1 = mar2;
+
+		printf("mb: size of enum-type %d, size of enum-var %d, mar1 0x%x, mar2 0x%016llx\n",
+			sizeof(enum marek_type),sizeof(m1),mar1,(unsigned long long)mar2);
+	}
+
 	printf("mb: %s():\n"
-	      "\tDCACHE_OFF 0x%x\n"
-	      "\tDCACHE_WRITEBACK 0x%x\n"
-	      "\tDCACHE_WRITEALLOC 0x%x\n",
-	      __func__, DCACHE_OFF, DCACHE_WRITEBACK, DCACHE_WRITEALLOC);
+	      "\t DCACHE_OFF 0x%llx\n"
+	      "\t DCACHE_WRITEBACK 0x%x\n"
+	      "\t DCACHE_WRITEALLOC 0x%x\n"
+	      "\t DCACHE_WRITETHROUGH 0x%x\n"
+	      "\t DCACHE_DEFAULT_OPTION 0x%x\n",
+	      __func__,
+	      DCACHE_OFF, DCACHE_WRITEBACK, DCACHE_WRITEALLOC, DCACHE_WRITETHROUGH, DCACHE_DEFAULT_OPTION);
+
 	printf("mb: %s(): Set up an identity-mapping for all 4GB, DCACHE_OFF, rw for everyone\n", __func__);
 
 	/* Set up an identity-mapping for all 4GB, rw for everyone */
@@ -141,41 +162,81 @@ static inline void mmu_setup(void)
 		set_section_dcache(i, DCACHE_OFF);
 	count = 0;
 
+#if 0
 	printf("mb: %s(): mmu mapping for CONFIG_NR_DRAM_BANKS\n", __func__);
 	for (i = 0; i < CONFIG_NR_DRAM_BANKS; i++) {
 		dram_bank_mmu_setup(i);
 		count = 0;
 	}
+#endif
+
 
 #if defined(CONFIG_ARMV7_LPAE) && __LINUX_ARM_ARCH__ != 4
+	/* mb: LPAE
+	 * For ours in 2nd level table each entry/block maps 2M. Therefore to map 4G we need
+	 * 2048 entries/blocks. However each block is 8 bytes so all together
+	 * the page tables occupy 16,384 bytes (=16K). So far tlb_addr points to it.
+	 *
+	 * However it is 2nd level table (holding 2M blocks) that needs to be pointed
+	 * from 1st level table entries that are tables ths time. We need four of them
+	 * each pointing to our 4 1G page tables. So what addr to place it? Possibly
+	 * just right after the 2nd levl page tables (=tlb_addr + 16K) calculated before.
+	 */ 
+
 	/* Set up 4 PTE entries pointing to our 4 1GB page tables */
 	for (i = 0; i < 4; i++) {
 		u64 *page_table = (u64 *)(gd->arch.tlb_addr + (4096 * 4));
 		u64 tpt = gd->arch.tlb_addr + (4096 * i);
 		page_table[i] = tpt | TTB_PAGETABLE;
 	}
+	printf("mb: %s(): we set page_tables 2048x entries (each 8 bytes) over tlb_addr @ %p\n", __func__, (u64 *)(gd->arch.tlb_addr + (4096 * 4)));
+	for (i = 0; i < 4; i++)
+		printf("0x%016llx ", *(u64 *)(gd->arch.tlb_addr + ((4096 * 4) + i * 8)));
+	printf("\n");
 
-	reg = TTBCR_EAE;
+#if 0
 #if defined(CONFIG_SYS_ARM_CACHE_WRITETHROUGH)
+	printf("mb: %s(): CONFIG_SYS_ARM_CACHE_WRITETHROUGH\n", __func__);
 	reg |= TTBCR_ORGN0_WT | TTBCR_IRGN0_WT;
 #elif defined(CONFIG_SYS_ARM_CACHE_WRITEALLOC)
+	printf("mb: %s(): CONFIG_SYS_ARM_CACHE_WRITEALLOC\n", __func__);
 	reg |= TTBCR_ORGN0_WBWA | TTBCR_IRGN0_WBWA;
 #else
+	printf("mb: %s(): CONFIG_SYS_ARM_CACHE_WRITEBACK\n", __func__);
 	reg |= TTBCR_ORGN0_WBNWA | TTBCR_IRGN0_WBNWA;
+#endif
 #endif
 
 	if (is_hyp()) {
 		/* Set HTCR to enable LPAE */
+		printf("mb: %s(): set htcr to 0x%x\n", __func__, reg);
 		asm volatile("mcr p15, 4, %0, c2, c0, 2"
 			: : "r" (reg) : "memory");
-		/* Set HTTBR0 */
+
+		/* Set HTTBR */
 		asm volatile("mcrr p15, 4, %0, %1, c2"
 			:
 			: "r"(gd->arch.tlb_addr + (4096 * 4)), "r"(0)
 			: "memory");
-		/* Set HMAIR */
+
+		/* Set HMAIR0 and 0*/
+		printf("mb: %s(): set hmair0 to 0x%x hmair1 to 0x%x\n",
+			__func__, MEMORY_ATTRIBUTES, MEMORY_ATTRIBUTES);
 		asm volatile("mcr p15, 4, %0, c10, c2, 0"
 			: : "r" (MEMORY_ATTRIBUTES) : "memory");
+		asm volatile("mcr p15, 4, %0, c10, c2, 1"
+			: : "r" (MEMORY_ATTRIBUTES) : "memory");
+
+		/* Read HMAIR0 and 1 back */
+		{
+			u32 hmair0, hmair1;
+			asm volatile("mrc p15, 4, %0, c10, c2, 0"
+				: "=r" (hmair0) : : "cc");
+			asm volatile("mrc p15, 4, %0, c10, c2, 1"
+				: "=r" (hmair1) : : "cc");
+			printf("mb: %s(): hmair0 0x%x and hmair1 0x%x\n",
+				__func__, hmair0, hmair1);
+		}
 	} else {
 		/* Set TTBCR to enable LPAE */
 		asm volatile("mcr p15, 0, %0, c2, c0, 2"
@@ -188,45 +249,13 @@ static inline void mmu_setup(void)
 		/* Set MAIR */
 		asm volatile("mcr p15, 0, %0, c10, c2, 0"
 			: : "r" (MEMORY_ATTRIBUTES) : "memory");
+		asm volatile("mcr p15, 0, %0, c10, c2, 1"
+			: : "r" (MEMORY_ATTRIBUTES) : "memory");
 	}
-#elif defined(CONFIG_CPU_V7A)
-	if (is_hyp()) {
-		/* Set HTCR to disable LPAE */
-		asm volatile("mcr p15, 4, %0, c2, c0, 2"
-			: : "r" (0) : "memory");
-	} else {
-		/* Set TTBCR to disable LPAE */
-		asm volatile("mcr p15, 0, %0, c2, c0, 2"
-			: : "r" (0) : "memory");
-	}
-	/* Set TTBR0 */
-	reg = gd->arch.tlb_addr & TTBR0_BASE_ADDR_MASK;
-#if defined(CONFIG_SYS_ARM_CACHE_WRITETHROUGH)
-	printf("mb: %s(): CONFIG_SYS_ARM_CACHE_WRITETHROUGH\n", __func__);
-	reg |= TTBR0_RGN_WT | TTBR0_IRGN_WT;
-#elif defined(CONFIG_SYS_ARM_CACHE_WRITEALLOC)
-	printf("mb: %s(): CONFIG_SYS_ARM_CACHE_WRITEALLOC\n", __func__);
-	reg |= TTBR0_RGN_WBWA | TTBR0_IRGN_WBWA;
-#else
-	printf("mb: %s(): CONFIG_SYS_ARM_CACHE_WRITEBACK\n", __func__);
-	reg |= TTBR0_RGN_WB | TTBR0_IRGN_WB;
-#endif
-	asm volatile("mcr p15, 0, %0, c2, c0, 0"
-		     : : "r" (reg) : "memory");
-#else
 	/* Copy the page table address to cp15 */
 	asm volatile("mcr p15, 0, %0, c2, c0, 0"
 		     : : "r" (gd->arch.tlb_addr) : "memory");
 #endif
-	{
-		/*
-		 * MRC p15, Op1, Rt, CRn, CRm, Op2 ; read a CP15 register into an ARM register
-		 *  MCR p15, Op1, Rt, CRn, CRm, Op2 ; write a CP15 register from an ARM register
-		 */
-		u32 ttbcr;
-		asm volatile("mrc p15, 0, %0, c2, c0, 2" : "=r" (ttbcr) : : "memory");
-		printf("mb: ttbcr 0x%x\n", ttbcr);
-	}
 	/*
 	 * initial value of Domain Access Control Register (DACR)
 	 * Set the access control to client (1U) for each of the 16 domains
@@ -237,6 +266,7 @@ static inline void mmu_setup(void)
 	/* and enable the mmu */
 	reg = get_cr();	/* get control reg. */
 	set_cr(reg | CR_M);
+	isb(); dsb();
 }
 
 static int mmu_enabled(void)
