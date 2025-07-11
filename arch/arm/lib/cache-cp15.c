@@ -218,6 +218,15 @@ static inline void mmu_setup(void)
 	asm volatile("mcr p15, 0, %0, c2, c0, 0"
 		     : : "r" (gd->arch.tlb_addr) : "memory");
 #endif
+	{
+		/*
+		 * MRC p15, Op1, Rt, CRn, CRm, Op2 ; read a CP15 register into an ARM register
+		 *  MCR p15, Op1, Rt, CRn, CRm, Op2 ; write a CP15 register from an ARM register
+		 */
+		u32 ttbcr;
+		asm volatile("mrc p15, 0, %0, c2, c0, 2" : "=r" (ttbcr) : : "memory");
+		printf("mb: ttbcr 0x%x\n", ttbcr);
+	}
 	/*
 	 * initial value of Domain Access Control Register (DACR)
 	 * Set the access control to client (1U) for each of the 16 domains
