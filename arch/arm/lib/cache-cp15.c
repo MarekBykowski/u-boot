@@ -21,7 +21,20 @@ DECLARE_GLOBAL_DATA_PTR;
 
 #ifdef CONFIG_SYS_ARM_MMU
 __weak void arm_init_before_mmu(void)
-{
+{		
+	u32 reg;
+	asm volatile("mcr p15, 0, %0, c0, c1, 1"
+		: : "r" (reg) : "memory");
+
+#define CPUID_ARM_VIRT_MASK		(0xF << CPUID_ARM_VIRT_SHIFT)
+#define CPUID_ARM_VIRT_SHIFT		12
+	if ((reg & CPUID_ARM_VIRT_MASK) >> 12 == 1)
+		printf("mb: Virt supported\n");
+	else
+		printf("mb: Virt not supported\n");
+
+	if (is_hyp())
+		printf("mb: Processor in HYP mode\n");
 }
 
 static int count = 0;
@@ -48,11 +61,11 @@ static void set_section_phys(int section, phys_addr_t phys,
 
 	/* Print only N pages tables */
 	if (count++ <= 3) {
-		printf("mb: %s(): addr %p: section %d, pa 0x%lx, dcache_option (0x%016llx), descriptor 0x%016llx\n",
+		printf("mb: %s(): addr %p: section %d, pa 0x%lx, dcache_option (0x%16llx), descriptor 0x%016llx\n",
 			__func__, page_table + section, section, phys,
-			option, value);
+			(u64)option, value);
 		printf("mb: %s(): We have HMAIR[0] or [1], each having 4x blocks [7:0]. Block descriptor points to HMAIR[%llx] and block %llx within it. Read it out\n",
-			__func__, (((value >> 2) & 0x7) & 0x4) >> 2, (value >> 2) & 0x7);
+			__func__, (((value >> 2) & 0x7) & 0x4) >> 2, (value >> 2) & 0x3);
 		
 	}
 }
@@ -127,10 +140,32 @@ __weak void dram_bank_mmu_setup(int bank)
 static inline void mmu_setup(void)
 {
 	int i;
-	u32 reg;
+	u32 reg = 0;
+
+	/* clear VM bit (aka disable stage-2 translation) */
+	{
+		u32 hcr;
+		asm volatile("mrc p15, 4, %0, c1, c1, 0" : "=r" (hcr));
+		hcr &= ~(1<<0);
+		asm volatile("mrc p15, 4, %0, c1, c1, 0" : : "r" (hcr));
+	}
 
 	printf("mb: %s(): page_tables @ %p\n", __func__, (u64 *)gd->arch.tlb_addr);
-	arm_init_before_mmu();
+	{		
+		u32 reg;
+		asm volatile("mrc p15, 0, %0, c0, c1, 1"
+			: "=r" (reg) : : "memory");
+
+#define CPUID_ARM_VIRT_MASK		(0xF << CPUID_ARM_VIRT_SHIFT)
+#define CPUID_ARM_VIRT_SHIFT		12
+		if ((reg & CPUID_ARM_VIRT_MASK) >> 12 == 1)
+			printf("mb: Virt supported\n");
+		else
+			printf("mb: Virt not supported\n");
+
+		if (is_hyp())
+			printf("mb: Processor in HYP mode\n");
+	}
 
 	{
 		#define D_MAR1 0x34
@@ -147,28 +182,24 @@ static inline void mmu_setup(void)
 	}
 
 	printf("mb: %s():\n"
-	      "\t DCACHE_OFF 0x%llx\n"
-	      "\t DCACHE_WRITEBACK 0x%x\n"
+	      "\t DCACHE_OFF_DEVICE 0x%x\n"
 	      "\t DCACHE_WRITEALLOC 0x%x\n"
-	      "\t DCACHE_WRITETHROUGH 0x%x\n"
 	      "\t DCACHE_DEFAULT_OPTION 0x%x\n",
 	      __func__,
-	      DCACHE_OFF, DCACHE_WRITEBACK, DCACHE_WRITEALLOC, DCACHE_WRITETHROUGH, DCACHE_DEFAULT_OPTION);
+	      DCACHE_OFF_DEVICE, DCACHE_WRITEALLOC, DCACHE_DEFAULT_OPTION);
 
 	printf("mb: %s(): Set up an identity-mapping for all 4GB, DCACHE_OFF, rw for everyone\n", __func__);
 
 	/* Set up an identity-mapping for all 4GB, rw for everyone */
 	for (i = 0; i < ((4096ULL * 1024 * 1024) >> MMU_SECTION_SHIFT); i++)
-		set_section_dcache(i, DCACHE_OFF);
+		set_section_dcache(i, DCACHE_OFF_DEVICE);
 	count = 0;
 
-#if 0
 	printf("mb: %s(): mmu mapping for CONFIG_NR_DRAM_BANKS\n", __func__);
 	for (i = 0; i < CONFIG_NR_DRAM_BANKS; i++) {
 		dram_bank_mmu_setup(i);
 		count = 0;
 	}
-#endif
 
 
 #if defined(CONFIG_ARMV7_LPAE) && __LINUX_ARM_ARCH__ != 4
@@ -194,7 +225,7 @@ static inline void mmu_setup(void)
 		printf("0x%016llx ", *(u64 *)(gd->arch.tlb_addr + ((4096 * 4) + i * 8)));
 	printf("\n");
 
-#if 0
+	/*reg = TTBCR_EAE;*/
 #if defined(CONFIG_SYS_ARM_CACHE_WRITETHROUGH)
 	printf("mb: %s(): CONFIG_SYS_ARM_CACHE_WRITETHROUGH\n", __func__);
 	reg |= TTBCR_ORGN0_WT | TTBCR_IRGN0_WT;
@@ -202,40 +233,50 @@ static inline void mmu_setup(void)
 	printf("mb: %s(): CONFIG_SYS_ARM_CACHE_WRITEALLOC\n", __func__);
 	reg |= TTBCR_ORGN0_WBWA | TTBCR_IRGN0_WBWA;
 #else
-	printf("mb: %s(): CONFIG_SYS_ARM_CACHE_WRITEBACK\n", __func__);
-	reg |= TTBCR_ORGN0_WBNWA | TTBCR_IRGN0_WBNWA;
-#endif
 #endif
 
-	if (is_hyp()) {
+	/*reg |= TTBCR_ORGN0_WBNWA | TTBCR_IRGN0_WBNWA;*/
+#define TTBCR_EAE_BIT		(1 << 31)
+#define HTCR_RES1			(1 << 31) | (1 << 23)
+#define HTCR_SH0_INNER_SHAREABLE	(0x3 << 12)
+#define HTCR_RGN0_OUTER_WBA	(0x1 << 10)
+#define HTCR_RGN0_INNER_WBA	(0x1 << 8)
+	reg = TTBCR_EAE_BIT | HTCR_RES1 | HTCR_SH0_INNER_SHAREABLE | HTCR_RGN0_OUTER_WBA | HTCR_RGN0_INNER_WBA;
+
+	if (!is_hyp()) {
 		/* Set HTCR to enable LPAE */
 		printf("mb: %s(): set htcr to 0x%x\n", __func__, reg);
 		asm volatile("mcr p15, 4, %0, c2, c0, 2"
 			: : "r" (reg) : "memory");
 
 		/* Set HTTBR */
+		printf("mb: %s(): set httbr to 0x%x\n", __func__, gd->arch.tlb_addr + (4096 * 4));
 		asm volatile("mcrr p15, 4, %0, %1, c2"
-			:
-			: "r"(gd->arch.tlb_addr + (4096 * 4)), "r"(0)
+			: : "r"(gd->arch.tlb_addr + (4096 * 4)), "r"(0)
 			: "memory");
 
-		/* Set HMAIR0 and 0*/
+		/* Set HMAIR0 and 1*/
 		printf("mb: %s(): set hmair0 to 0x%x hmair1 to 0x%x\n",
-			__func__, MEMORY_ATTRIBUTES, MEMORY_ATTRIBUTES);
+			__func__, MEMORY_ATTRIBUTES, 0);
 		asm volatile("mcr p15, 4, %0, c10, c2, 0"
 			: : "r" (MEMORY_ATTRIBUTES) : "memory");
 		asm volatile("mcr p15, 4, %0, c10, c2, 1"
-			: : "r" (MEMORY_ATTRIBUTES) : "memory");
-
-		/* Read HMAIR0 and 1 back */
+			: : "r" (0) : "memory");
+		/*cp_delay*/
 		{
-			u32 hmair0, hmair1;
-			asm volatile("mrc p15, 4, %0, c10, c2, 0"
-				: "=r" (hmair0) : : "cc");
-			asm volatile("mrc p15, 4, %0, c10, c2, 1"
-				: "=r" (hmair1) : : "cc");
-			printf("mb: %s(): hmair0 0x%x and hmair1 0x%x\n",
-				__func__, hmair0, hmair1);
+			volatile int i;
+#define nop() __asm__ __volatile__("mov\tr0,r0\t@ nop\n\t");
+
+			/* copro seems to need some delay between reading and writing */
+			for (i = 0; i < 100; i++)
+				nop();
+			asm volatile("" : : : "memory");
+		}
+		/*read it back*/
+		{
+			uint32_t hmair0;
+			asm volatile("mrc p15, 4, %0, c10, c2, 0" : "=r"(hmair0));
+			printf("HMAIR0 = 0x%08x\n", hmair0);
 		}
 	} else {
 		/* Set TTBCR to enable LPAE */
@@ -263,10 +304,23 @@ static inline void mmu_setup(void)
 	asm volatile("mcr p15, 0, %0, c3, c0, 0"
 		     : : "r" (0x55555555));
 
+	/* Invalidate TLB entries */
+	asm volatile("mcr p15, 0, %0, c8, c7, 0"
+		     : : "r" (0));
+
+	/*
+	 * Ensure all translation table writes have drained into memory, the TLB
+	 * invalidation is complete, and translation register writes are
+	 * committed before enabling the MMU
+	 */
+	asm volatile("dsb ish\n\t");
+	asm volatile("isb\n\t");
+
 	/* and enable the mmu */
 	reg = get_cr();	/* get control reg. */
-	set_cr(reg | CR_M);
-	isb(); dsb();
+
+#define SCTLR_WXN_BIT		(1 << 19)
+	set_cr(reg | CR_M | CR_C);
 }
 
 static int mmu_enabled(void)

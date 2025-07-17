@@ -169,28 +169,34 @@ static inline void set_cr(unsigned int val)
  * MAIR0[23:16] 0xee Outer/Inner Write-Back, Read-Allocate No Write-Allocate
  * MAIR0[31:24] 0xff Outer/Inner Write-Back, Read-Allocate Write-Allocate
  */
-#define MEMORY_ATTRIBUTES	((0x00 << (0 * 8)) | (0xaa << (1 * 8)) | \
+/*#define MEMORY_ATTRIBUTES	((0x00 << (0 * 8)) | (0xaa << (1 * 8)) | \
 				 (0xee << (2 * 8)) | (0xff << (3 * 8)))
-
+*/
+/*
+Attr3	0x00 Strongly-Ordered
+Attr2	0x44 Normal, Inner/Outer Non-cacheable
+Attr1	0x04 Device-Memory
+Attr0	0xFF Normal memory, Inner/Outer Write-Back Cacheable, Read-Allocate Write-Allocate
+*/
+#define MEMORY_ATTRIBUTES	((0xff << (0 * 8)) | (0x04 << (1 * 8)) | \
+				 (0x44 << (2 * 8)) | (0x04 << (3 * 8)))
 /* options available for data cache on each page */
 enum dcache_option {
-	DCACHE_OFF = TTB_SECT | TTB_SECT_INNER_SH | TTB_MAIR(0) | TTB_SECT_MAIR(0) | TTB_SECT_XN_MASK,
-	DCACHE_WRITETHROUGH = TTB_SECT | TTB_SECT_INNER_SH | TTB_MAIR(0) | TTB_SECT_MAIR(1),
-	DCACHE_WRITEBACK = TTB_SECT | TTB_SECT_INNER_SH | TTB_MAIR(0) | TTB_SECT_MAIR(2),
-	DCACHE_WRITEALLOC = TTB_SECT | TTB_SECT_INNER_SH | TTB_MAIR(0) | TTB_SECT_MAIR(3),
+	DCACHE_OFF_STRONGLY = TTB_SECT | TTB_MAIR(0) | TTB_SECT_MAIR(3),
+	DCACHE_OFF_NORMAL = TTB_SECT | TTB_MAIR(0) | TTB_SECT_MAIR(2),
+	DCACHE_OFF_DEVICE = TTB_SECT | TTB_MAIR(0) | TTB_SECT_MAIR(1),
+	DCACHE_WRITEALLOC = TTB_SECT | TTB_MAIR(0) | TTB_SECT_MAIR(0) | TTB_SECT_INNER_SH,
 };
-#elif defined(CONFIG_CPU_V7A)
-#else
-#define TTB_SECT_AP		(3 << 10)
 #endif
 
 #if defined(CONFIG_SYS_ARM_CACHE_WRITETHROUGH)
-#define DCACHE_DEFAULT_OPTION	DCACHE_WRITETHROUGH
+#error "CONFIG_SYS_ARM_CACHE_WRITETHROUGH doesn't exist"
 #elif defined(CONFIG_SYS_ARM_CACHE_WRITEALLOC)
 #define DCACHE_DEFAULT_OPTION	DCACHE_WRITEALLOC
 #elif defined(CONFIG_SYS_ARM_CACHE_WRITEBACK)
-#define DCACHE_DEFAULT_OPTION	DCACHE_WRITEBACK
+#error "CONFIG_SYS_ARM_CACHE_WRITEBACK doesn't exist"
 #endif
+
 
 /* Size of an MMU section */
 enum {
