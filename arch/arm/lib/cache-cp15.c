@@ -233,15 +233,9 @@ static inline void mmu_setup(void)
 	printf("mb: %s(): CONFIG_SYS_ARM_CACHE_WRITEALLOC\n", __func__);
 	reg |= TTBCR_ORGN0_WBWA | TTBCR_IRGN0_WBWA;
 #else
+	reg |= TTBCR_ORGN0_WBNWA | TTBCR_IRGN0_WBNWA;
 #endif
 
-	/*reg |= TTBCR_ORGN0_WBNWA | TTBCR_IRGN0_WBNWA;*/
-#define TTBCR_EAE_BIT		(1 << 31)
-#define HTCR_RES1			(1 << 31) | (1 << 23)
-#define HTCR_SH0_INNER_SHAREABLE	(0x3 << 12)
-#define HTCR_RGN0_OUTER_WBA	(0x1 << 10)
-#define HTCR_RGN0_INNER_WBA	(0x1 << 8)
-	reg = TTBCR_EAE_BIT | HTCR_RES1 | HTCR_SH0_INNER_SHAREABLE | HTCR_RGN0_OUTER_WBA | HTCR_RGN0_INNER_WBA;
 
 	if (!is_hyp()) {
 		/* Set HTCR to enable LPAE */
