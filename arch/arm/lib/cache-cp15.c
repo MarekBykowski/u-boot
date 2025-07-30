@@ -121,6 +121,7 @@ static inline void mmu_setup(void)
 	{
 		u32 hcr;
 		asm volatile("mrc p15, 4, %0, c1, c1, 0" : "=r" (hcr));
+		printf("mb: hcr read is 0x%08x\n", hcr);
 		hcr &= ~(1<<0);
 		printf("mb: setting hcr 0x%08x\n", hcr);
 		asm volatile("mrc p15, 4, %0, c1, c1, 0" : : "r" (hcr));
