@@ -116,6 +116,15 @@ static inline void mmu_setup(void)
 	int i;
 	u32 reg;
 
+
+	/* clear VM bit (aka disable stage-2 translation) */
+	{
+		u32 hcr;
+		asm volatile("mrc p15, 4, %0, c1, c1, 0" : "=r" (hcr));
+		hcr &= ~(1<<0);
+		asm volatile("mrc p15, 4, %0, c1, c1, 0" : : "r" (hcr));
+	}
+
 	arm_init_before_mmu();
 	/* Set up an identity-mapping for all 4GB, rw for everyone */
 	for (i = 0; i < ((4096ULL * 1024 * 1024) >> MMU_SECTION_SHIFT); i++)
