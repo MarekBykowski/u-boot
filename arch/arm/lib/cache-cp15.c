@@ -177,7 +177,7 @@ static inline void mmu_setup(void)
 			:
 			: "r"(gd->arch.tlb_addr + (4096 * 4)), "r"(0)
 			: "memory");
-		asm volatile("mcrr p15, 4, %0, %1, c2"
+		asm volatile("mrrc p15, 4, %0, %1, c2"
 			: "=r"(temp), "=r"(temp1)
 			:
 			: "memory");
