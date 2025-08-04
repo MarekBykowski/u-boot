@@ -169,32 +169,30 @@ static inline void mmu_setup(void)
 		asm volatile("mcr p15, 4, %0, c2, c0, 2"
 			: : "r" (reg) : "memory");
 		asm volatile("mrc p15, 4, %0, c2, c0, 2"
-			: "=r(reg)" : : "memory");
+			: "=r" (reg) : : "memory");
 		printf("mb: %s(): HTCR is: %08x\n", __func__, temp);
 
 		/* Set HTTBR */
 		asm volatile("mcrr p15, 4, %0, %1, c2"
 			:
-			: "r"(gd->arch.tlb_addr + (4096 * 4)), "r"(0)
+			: "r" (gd->arch.tlb_addr + (4096 * 4)), "r"(0)
 			: "memory");
 		asm volatile("mrrc p15, 4, %0, %1, c2"
-			: "=r"(temp), "=r"(temp1)
-			:
-			: "memory");
+			: "=r" (temp), "=r" (temp1) : : "memory");
 		printf("mb: %s(): HTTBR is: %016llx\n", __func__, (unsigned long long)(temp|(unsigned long long)(temp1)<<32) );
 
 		/* Set HMAIR0 */
 		asm volatile("mcr p15, 4, %0, c10, c2, 0"
 			: : "r" (MEMORY_ATTRIBUTES) : "memory");
 		asm volatile("mrc p15, 4, %0, c10, c2, 0"
-			: "=r(temp)" : : "memory");
+			: "=r" (temp) : : "memory");
 		printf("mb: %s(): HMAIR0 is: %08x\n", __func__, temp);
 
 		/* Set HMAIR1 */
 		asm volatile("mcr p15, 4, %0, c10, c2, 1"
 			: : "r" (0) : "memory");
 		asm volatile("mrc p15, 4, %0, c10, c2, 1"
-			: "=r(temp)" : : "memory");
+			: "=r" (temp) : : "memory");
 		printf("mb: %s(): HMAIR1 is: %08x\n", __func__, temp);
 	} else {
 		/* Set TTBCR to enable LPAE */
@@ -203,7 +201,7 @@ static inline void mmu_setup(void)
 		/* Set 64-bit TTBR0 */
 		asm volatile("mcrr p15, 0, %0, %1, c2"
 			:
-			: "r"(gd->arch.tlb_addr + (4096 * 4)), "r"(0)
+			: "r" (gd->arch.tlb_addr + (4096 * 4)), "r"(0)
 			: "memory");
 		/* Set MAIR */
 		asm volatile("mcr p15, 0, %0, c10, c2, 0"
