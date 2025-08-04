@@ -181,7 +181,7 @@ static inline void mmu_setup(void)
 			: "=r"(temp), "=r"(temp1)
 			:
 			: "memory");
-		printf("mb: %s(): HTTBR is: %016llx\n", __func__, (unsigned long long)(temp|temp1<<32) );
+		printf("mb: %s(): HTTBR is: %016llx\n", __func__, (unsigned long long)(temp|(unsigned long long)(temp1)<<32) );
 
 		/* Set HMAIR0 */
 		asm volatile("mcr p15, 4, %0, c10, c2, 0"
