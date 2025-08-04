@@ -154,17 +154,48 @@ static inline void mmu_setup(void)
 #endif
 
 	if (is_hyp()) {
+		/*
+		 * HYP translation regime:
+		 * The PL2 MMU is used in Hyp mode to translate the virtual addresses that the Hypervisor uses
+		 * to address physical memory. Apart from setting up and managing its own translation tables, a
+		 * Hypervisor has to create and manage Stage 2 translation tables for each of its guests.
+		 *
+		 * The following are the registers used by hypervisor to set up its own page tables.
+		 */
+
+		u32 temp = 0, temp1 = 0;
+
 		/* Set HTCR to enable LPAE */
 		asm volatile("mcr p15, 4, %0, c2, c0, 2"
 			: : "r" (reg) : "memory");
-		/* Set HTTBR0 */
+		asm volatile("mrc p15, 4, %0, c2, c0, 2"
+			: "=r(reg)" : : "memory");
+		printf("mb: %s(): HTCR is: %08x\n", __func__, temp);
+
+		/* Set HTTBR */
 		asm volatile("mcrr p15, 4, %0, %1, c2"
 			:
 			: "r"(gd->arch.tlb_addr + (4096 * 4)), "r"(0)
 			: "memory");
-		/* Set HMAIR */
+		asm volatile("mcrr p15, 4, %0, %1, c2"
+			: "=r"(temp), "=r"(temp1)
+			:
+			: "memory");
+		printf("mb: %s(): HTTBR is: %016llx\n", __func__, (unsigned long long)(temp|temp1<<32) );
+
+		/* Set HMAIR0 */
 		asm volatile("mcr p15, 4, %0, c10, c2, 0"
 			: : "r" (MEMORY_ATTRIBUTES) : "memory");
+		asm volatile("mrc p15, 4, %0, c10, c2, 0"
+			: "=r(temp)" : : "memory");
+		printf("mb: %s(): HMAIR0 is: %08x\n", __func__, temp);
+
+		/* Set HMAIR1 */
+		asm volatile("mcr p15, 4, %0, c10, c2, 1"
+			: : "r" (0) : "memory");
+		asm volatile("mrc p15, 4, %0, c10, c2, 1"
+			: "=r(temp)" : : "memory");
+		printf("mb: %s(): HMAIR1 is: %08x\n", __func__, temp);
 	} else {
 		/* Set TTBCR to enable LPAE */
 		asm volatile("mcr p15, 0, %0, c2, c0, 2"
