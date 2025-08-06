@@ -195,7 +195,7 @@ static inline void mmu_setup(void)
 		asm volatile("mcr p15, 4, %0, c2, c0, 2"
 			: : "r" (reg) : "memory");
 		asm volatile("mrc p15, 4, %0, c2, c0, 2"
-			: "=r" (reg) : : "memory");
+			: "=r" (temp) : : "memory");
 		printf("mb: %s(): HTCR is: %08x\n", __func__, temp);
 
 		/* Set HTTBR */
