@@ -93,6 +93,27 @@ void mmu_set_region_dcache_behaviour_phys(phys_addr_t start, phys_addr_t phys,
 	mmu_page_table_flush(startpt, stoppt);
 }
 
+
+void mmu_read_page_desc(phys_addr_t start, size_t size)
+{
+	u64 *page_table = (u64 *)gd->arch.tlb_addr;
+	unsigned long upto, end;
+
+	start = start >> MMU_SECTION_SHIFT;
+	size = ALIGN((start / 2) + (size / 2), MMU_SECTION_SIZE / 2)
+	      >> (MMU_SECTION_SHIFT - 1);
+	end = start + size;
+
+	printf("mb: start: %lx end: %lx\n", start, end);
+	/* Read PTE at  */
+	for (upto = start; upto < end; upto++) {
+		phys_addr_t phys = upto << MMU_SECTION_SHIFT;
+		printf("mb: %s(): page_desc: %016llx at virt addr: %pa\n",
+			__func__, page_table[upto], &phys);
+	}
+
+}
+
 __weak void dram_bank_mmu_setup(int bank)
 {
 	struct bd_info *bd = gd->bd;
@@ -135,6 +156,11 @@ static inline void mmu_setup(void)
 	for (i = 0; i < CONFIG_NR_DRAM_BANKS; i++) {
 		dram_bank_mmu_setup(i);
 	}
+
+	/* mb: read block descr at (addr, size) */
+#define SZ_2M 0x00200000
+	mmu_read_page_desc(0, SZ_2M*3);
+	mmu_read_page_desc(0x80000000, SZ_2M*3);
 
 #if defined(CONFIG_ARMV7_LPAE) && __LINUX_ARM_ARCH__ != 4
 	/* Set up 4 PTE entries pointing to our 4 1GB page tables */
