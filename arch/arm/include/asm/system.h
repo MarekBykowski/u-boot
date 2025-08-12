@@ -466,6 +466,12 @@ static inline int is_hyp(void)
 #endif
 }
 
+static inline u32 tell_mode(void)
+{
+	return (get_cpsr() & 0x1f);
+}
+
+
 static inline unsigned int get_cr(void)
 {
 	unsigned int val;

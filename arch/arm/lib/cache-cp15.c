@@ -17,6 +17,72 @@
 DECLARE_GLOBAL_DATA_PTR;
 
 #ifdef CONFIG_SYS_ARM_MMU
+
+static unsigned int read_id_pfr1(void)
+{
+	unsigned int reg;
+
+	asm("mrc p15, 0, %0, c0, c1, 1\n" : "=r"(reg));
+	return reg;
+}
+
+/*
+ * Read on VA to PA on 'B3.14 Virtual Address to Physical Address translation operations'
+ */
+static __attribute__((noclone)) void display_mapping(u32 address);
+void static display_mapping(u32 address)
+{
+	u64 par;
+	u32 low, high;
+	u32 reg;
+
+	reg = read_id_pfr1();
+	if ((reg & 0xf000) == 0)
+		printf("mb: %s(): Virtualization Extensions not implemented\n", __func__);
+	if ((reg & 0xf0) == 0)
+		printf("mb: %s(): Security extensions not implemented\n", __func__);
+
+	if (is_hyp())
+		printf("mb: %s(): yeap we are in PL2 HYP mode\n", __func__);
+	else {
+		printf("mb: %s(): we are not in PL2 HYP mode: 0x%x\n",
+			__func__, tell_mode());
+		return;
+	}
+
+	printf("----- Translating VA 0x%x\n", address);
+	/*__asm__ __volatile__ ("at s1e3r, %0" : : "r" (address));*/
+	asm_arm_or_thumb2("mcr p15, 4, %0, c1, c0, 0 @ set CR" :
+					  : "r" (address)
+					  : "cc");
+	isb();
+	/*__asm__ __volatile__ ("mrs %0, PAR_EL1\n" : "=r" (par_el1));*/
+	asm volatile("mrrc p15, 0, %0, %1, c7" : "=r" (low), "=r" (high));
+	par = low & (((u64)high) << 32);
+
+	if (0 != (par & 1)) {
+		printf("Address Translation Failed: 0x%08x\n"
+		"    FS: 0x%llx\n",
+		address,
+		(par & 0xfe) >> 1);
+	} else {
+		printf("Address Translation Succeeded: 0x%x\n"
+		"ATTR: 0x%llx\n"
+		"  PA: 0x%llx\n"
+		"LPAE: 0x%llx\n"
+		"  NS: 0x%llx\n"
+		"  SH: 0x%llx\n",
+		address,
+		(par & 0xff00000000000000) >> 56,
+		par & 0xfffffff000,
+		par & 0x800 >> 11,
+		(par & 0x200) >> 9,
+		(par & 0x180) >> 7);
+	}
+
+	return;
+}
+
 __weak void arm_init_before_mmu(void)
 {
 }
@@ -314,6 +380,7 @@ void mmu_set_region_dcache_behaviour(phys_addr_t start, size_t size,
 void dcache_enable(void)
 {
 	cache_enable(CR_C);
+	display_mapping(0);
 }
 
 void dcache_disable(void)
