@@ -20,7 +20,7 @@ char *display_options_get_banner_priv(bool newlines, const char *build_tag,
 {
 	int len;
 
-	len = snprintf(buf, size, "%s%s", newlines ? "\n\n" : "",
+	len = snprintf(buf, size, "%smb:%s", newlines ? "\n\n" : "",
 		       version_string);
 	if (build_tag && len < size)
 		len += snprintf(buf + len, size - len, ", Build: %s",
