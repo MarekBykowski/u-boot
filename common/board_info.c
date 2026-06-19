@@ -75,5 +75,6 @@ int show_board_info(void)
 		}
 	}
 
+	printf("mb: before checkboard\n");
 	return checkboard();
 }
